@@ -181,7 +181,7 @@ input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--ink); flex
   display: inline-flex; align-items: center; gap: 6px;
   transform: rotate(-2deg);
 }
-.brand-mark { display: inline-block; transform: rotate(-12deg); }
+.brand-mark { display: block; width: 40px; height: 40px; transform: rotate(-8deg); }
 .status {
   display: inline-flex; align-items: center; gap: 8px;
   font-size: 1rem;

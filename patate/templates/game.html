@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Patate — fusion{% endblock %}
+{% block title %}Patate{% endblock %}
 {% block body_class %}page-game{% endblock %}
 {% block body %}
 <header class="topbar {{ 'is-admin' if is_admin else 'is-guest' }}">
-  <a class="brand" href="{{ url_for('routes.game') }}"><span class="brand-mark" aria-hidden="true">🥔</span> Patate</a>
+  <a class="brand" href="{{ url_for('routes.game') }}"><img class="brand-mark" src="{{ url_for('static', filename='icons/favicon.svg') }}" alt="" width="40" height="40"> Patate</a>
   {% if is_admin %}
     <span class="status status-on" title="Le mot de passe a été saisi sur ce navigateur">
       <span class="dot" aria-hidden="true"></span> Connecté · packs privés visibles

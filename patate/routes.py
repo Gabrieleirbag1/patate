@@ -68,6 +68,12 @@ def api_pack(pack_id):
     return response
 
 
+@bp.route("/favicon.ico")
+def favicon():
+    """Les navigateurs (et certains robots) demandent /favicon.ico sans lire les <link rel=icon>."""
+    return current_app.send_static_file("icons/favicon.ico")
+
+
 @bp.route("/media/<pack_id>/<filename>")
 def media(pack_id, filename):
     try:

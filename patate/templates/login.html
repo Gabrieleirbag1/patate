@@ -3,7 +3,7 @@
 {% block body_class %}page-admin{% endblock %}
 {% block body %}
 <header class="topbar is-guest">
-  <a class="brand" href="{{ url_for('routes.game') }}"><span class="brand-mark" aria-hidden="true">🥔</span> Patate</a>
+  <a class="brand" href="{{ url_for('routes.game') }}"><img class="brand-mark" src="{{ url_for('static', filename='icons/favicon.svg') }}" alt="" width="40" height="40"> Patate</a>
   <span class="status status-off"><span class="dot" aria-hidden="true"></span> Invité</span>
   <nav class="topbar-actions"><a class="button" href="{{ url_for('routes.game') }}">← Retour au jeu</a></nav>
 </header>
