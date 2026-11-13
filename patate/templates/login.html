@@ -11,6 +11,13 @@
   <h1>Ajouter tes images et tes sons</h1>
   <p>Un <strong>pack</strong> remplace les fruits du jeu par tes propres images (des photos de proches, par exemple)
     et tes propres sons. Les packs se créent et se modifient ici, après avoir saisi le mot de passe.</p>
+  {% if not configured %}
+  <div class="card stack" role="alert">
+    <h2>Aucun mot de passe n'est configuré</h2>
+    <p>Les packs sont fermés tant que la personne qui héberge le jeu n'a pas choisi de mot de passe :
+      il faut renseigner <kbd>PATATE_PASSWORD</kbd> dans le fichier <kbd>.env</kbd>, puis relancer l'application.</p>
+  </div>
+  {% else %}
   <form method="post" action="{{ url_for('auth.login') }}" class="stack card">
     <input type="hidden" name="next" value="{{ next_url }}">
     <label>Mot de passe
@@ -19,6 +26,7 @@
     {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
     <button type="submit" class="primary">Se connecter</button>
   </form>
+  {% endif %}
   <p class="muted small">Pas de compte à créer : un seul mot de passe, partagé. Une fois connecté, tu vois aussi
     les packs privés dans le jeu, jusqu'à ce que tu te déconnectes.</p>
 </main>

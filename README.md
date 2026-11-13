@@ -9,12 +9,15 @@ C'est le portage web de `final.py` (pygame/pymunk). La simulation tourne dans le
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+cp .env.example .env               # puis choisis ton mot de passe dans .env
 .venv/bin/python app.py            # http://127.0.0.1:5000
 ```
 
+Les réglages se font dans le fichier **`.env`** à la racine (ignoré par git ; modèle : `.env.example`). Une vraie variable d'environnement garde la priorité sur le fichier.
+
 | Variable            | Défaut                    | Rôle                                        |
 |---------------------|---------------------------|---------------------------------------------|
-| `PATATE_PASSWORD`   | `patate`                  | mot de passe des Settings                   |
+| `PATATE_PASSWORD`   | *aucun* (obligatoire)     | mot de passe des Settings ; vide = Settings fermés |
 | `PATATE_SECRET_KEY` | générée dans `data/`      | signature du cookie de session              |
 | `PATATE_DATA_DIR`   | `./data`                  | dossier des packs personnalisés             |
 | `HOST` / `PORT`     | `127.0.0.1` / `5000`      | adresse d'écoute (`HOST=0.0.0.0` pour le réseau local) |
@@ -33,7 +36,7 @@ Quand la flasque est pleine (balles immobiles dans le goulot pendant 3 s), la pa
 
 ## Settings (mot de passe)
 
-`/settings` est protégé par un mot de passe unique (par défaut `patate`), sans comptes. On peut y :
+`/settings` est protégé par un mot de passe unique, défini par `PATATE_PASSWORD` dans `.env`, sans comptes. Tant qu'il est vide, personne ne peut y entrer (le jeu, lui, marche normalement). On peut y :
 
 - créer, renommer et supprimer des packs ;
 - envoyer une image et/ou un son pour chacun des 8 niveaux (du plus petit au plus gros) ;

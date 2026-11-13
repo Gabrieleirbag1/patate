@@ -12,7 +12,14 @@ def is_admin():
     return session.get("admin") is True
 
 
+def password_configured():
+    return bool(current_app.config["PATATE_PASSWORD"].strip())
+
+
 def check_password(candidate):
+    """Sans mot de passe configuré dans .env, personne ne peut entrer."""
+    if not password_configured():
+        return False
     expected = current_app.config["PATATE_PASSWORD"]
     return hmac.compare_digest((candidate or "").encode(), expected.encode())
 
@@ -46,13 +53,15 @@ def login():
     next_url = request.values.get("next") or ""
     if not next_url.startswith("/settings") or next_url.startswith("//"):
         next_url = url_for("routes.settings")
+    if not password_configured():
+        return render_template("login.html", error=None, next_url=next_url, configured=False), 503
     if request.method == "POST":
         if check_password(request.form.get("password")):
             session.clear()
             session["admin"] = True
             return redirect(next_url)
         error = "Mot de passe incorrect."
-    return render_template("login.html", error=error, next_url=next_url), (401 if error else 200)
+    return render_template("login.html", error=error, next_url=next_url, configured=True), (401 if error else 200)
 
 
 @bp.route("/settings/logout", methods=["POST"])
