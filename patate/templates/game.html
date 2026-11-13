@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Patate — fusion{% endblock %}
+{% block body_class %}page-game{% endblock %}
+{% block body %}
+<main class="game">
+  <div class="stage">
+    <canvas id="game" aria-label="Simulation : des balles tombent dans une flasque et fusionnent"></canvas>
+    <button id="start" class="start" type="button">
+      <span class="start-title">Patate</span>
+      <span class="start-sub">Cliquer pour démarrer (active le son)</span>
+    </button>
+  </div>
+  <nav class="toolbar" aria-label="Contrôles">
+    <label class="pack-picker">Pack
+      <select id="pack"><option value="fruits">Fruits</option></select>
+    </label>
+    <button id="btn-drop" type="button" title="Espace">Lâcher</button>
+    <button id="btn-auto" type="button" title="A">Auto</button>
+    <button id="btn-speed" type="button" title="F">Vitesse x1</button>
+    <button id="btn-reset" type="button" title="R">Réinitialiser</button>
+    <button id="btn-sound" type="button">Son</button>
+    <a class="settings-link" href="{{ url_for('routes.settings') }}">Settings</a>
+  </nav>
+  <p class="hint">Clic : lâcher une balle · Espace : lâcher · A : auto · F : vitesse · R : réinitialiser</p>
+</main>
+<script src="{{ url_for('static', filename='vendor/planck.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/audio.js') }}"></script>
+<script src="{{ url_for('static', filename='js/game.js') }}"></script>
+{% endblock %}

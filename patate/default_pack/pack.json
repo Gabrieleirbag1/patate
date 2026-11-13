@@ -1,0 +1,14 @@
+{
+  "name": "Fruits",
+  "crop_circle": false,
+  "slots": [
+    {"label": "cerise", "image": "img_0.png", "sound": "snd_0.mp3"},
+    {"label": "fraise", "image": "img_1.png", "sound": "snd_1.mp3"},
+    {"label": "raisin", "image": "img_2.png", "sound": "snd_2.mp3"},
+    {"label": "orange", "image": "img_3.png", "sound": "snd_3.mp3"},
+    {"label": "pomme", "image": "img_4.png", "sound": "snd_4.mp3"},
+    {"label": "pamplemousse", "image": "img_5.png", "sound": "snd_5.mp3"},
+    {"label": "melon", "image": "img_6.png", "sound": "snd_6.mp3"},
+    {"label": "pastèque", "image": "img_7.png", "sound": "snd_7.mp3"}
+  ]
+}

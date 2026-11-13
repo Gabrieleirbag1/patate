@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Settings — {{ pack.name }}{% endblock %}
+{% block body_class %}page-admin{% endblock %}
+{% block body %}
+{% include "_admin_header.html" %}
+<main class="panel" id="pack-editor" data-pack="{{ pack.id }}" data-readonly="{{ 'true' if pack.readonly else 'false' }}">
+  <h1>{{ pack.name }}</h1>
+  {% if pack.readonly %}
+    <p class="muted">Pack par défaut, en lecture seule. Crée un nouveau pack pour utiliser tes propres images et sons.</p>
+  {% else %}
+  <form id="pack-meta" class="row wrap">
+    <label>Nom <input type="text" name="name" value="{{ pack.name }}" maxlength="60" required></label>
+    <label class="check"><input type="checkbox" name="crop_circle" {% if pack.crop_circle %}checked{% endif %}>
+      Découper les images en cercle (conseillé pour des photos)</label>
+    <button type="submit">Enregistrer</button>
+  </form>
+
+  <section class="import">
+    <h2>Importer un dossier</h2>
+    <p class="muted">Choisis un dossier (ou plusieurs fichiers) d'images et de sons. Un fichier nommé comme un niveau
+      (« cerise.jpg », « 3.mp3 »…) va dans ce niveau ; les autres remplissent les niveaux restants
+      <strong>par ordre alphabétique</strong>, du plus petit au plus gros. Images et sons sont rangés séparément.</p>
+    <div class="row wrap">
+      <label class="file-btn">Choisir un dossier<input type="file" id="import-dir" webkitdirectory multiple></label>
+      <label class="file-btn">Choisir des fichiers<input type="file" id="import-files" multiple accept="image/*,.mp3,.wav,.ogg"></label>
+    </div>
+  </section>
+  {% endif %}
+  <p id="msg" class="status" role="status"></p>
+
+  <h2>Niveaux</h2>
+  <ol class="slots">
+    {% for l in pack.levels %}
+    <li class="slot" data-level="{{ l.level }}">
+      <div class="slot-img">
+        {% if l.image_url %}<img src="{{ l.image_url }}" alt="">{% endif %}
+        <span class="slot-num">{{ l.level + 1 }}</span>
+      </div>
+      <div class="slot-body">
+        {% if pack.readonly %}
+          <strong>{{ l.label }}</strong>
+        {% else %}
+          <input type="text" class="label-input" value="{{ l.label }}" maxlength="40" aria-label="Nom du niveau {{ l.level + 1 }}">
+        {% endif %}
+        <p class="small muted">
+          Image : {{ 'pack Fruits' if l.image_inherited else ('personnalisée' if l.image_url else 'balle de secours') }} ·
+          Son : {{ 'pack Fruits' if l.sound_inherited else ('personnalisé' if l.sound_url else 'aucun') }}
+          {% if l.sound_url %}<button type="button" class="link play" data-src="{{ l.sound_url }}">▶ écouter</button>{% endif %}
+        </p>
+        {% if not pack.readonly %}
+        <div class="row wrap">
+          <label class="file-btn small">Image…<input type="file" class="up" data-kind="image" accept="image/*"></label>
+          <label class="file-btn small">Son…<input type="file" class="up" data-kind="sound" accept=".mp3,.wav,.ogg,audio/*"></label>
+          {% if l.image_url and not l.image_inherited %}<button type="button" class="link clear" data-kind="image">retirer l'image</button>{% endif %}
+          {% if l.sound_url and not l.sound_inherited %}<button type="button" class="link clear" data-kind="sound">retirer le son</button>{% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ol>
+
+  <div class="row wrap">
+    <a class="button primary" href="{{ url_for('routes.game') }}?pack={{ pack.id }}">Jouer avec ce pack</a>
+    {% if not pack.readonly %}
+      <button type="button" id="save-labels">Enregistrer les noms</button>
+      <button type="button" id="delete-pack" class="danger">Supprimer le pack</button>
+    {% endif %}
+  </div>
+</main>
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+{% endblock %}

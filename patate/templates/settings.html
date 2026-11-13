@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Settings — packs{% endblock %}
+{% block body_class %}page-admin{% endblock %}
+{% block body %}
+{% include "_admin_header.html" %}
+<main class="panel">
+  <h1>Packs de médias</h1>
+  <p class="muted">Un pack contient {{ LEVELS }} niveaux, du plus petit au plus gros, avec pour chacun une image et un son.
+    Le pack « Fruits » est celui du jeu par défaut ; il ne peut pas être modifié.</p>
+
+  <ul class="pack-list">
+    {% for p in packs %}
+    <li>
+      <a href="{{ url_for('routes.pack_edit', pack_id=p.id) }}">{{ p.name }}</a>
+      {% if p.readonly %}<span class="tag">par défaut · lecture seule</span>{% endif %}
+      <a class="small" href="{{ url_for('routes.game') }}?pack={{ p.id }}">Jouer</a>
+    </li>
+    {% endfor %}
+  </ul>
+
+  <h2>Nouveau pack</h2>
+  <form id="create-pack" class="row">
+    <input type="text" name="name" maxlength="60" placeholder="ex. Famille" required>
+    <button type="submit" class="primary">Créer</button>
+  </form>
+  <p id="msg" class="error" role="alert"></p>
+</main>
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+{% endblock %}

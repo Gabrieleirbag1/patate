@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Settings — mot de passe{% endblock %}
+{% block body_class %}page-admin{% endblock %}
+{% block body %}
+<main class="panel narrow">
+  <h1>Settings</h1>
+  <p class="muted">L'ajout et la modification des images et des sons sont protégés par un mot de passe.</p>
+  <form method="post" action="{{ url_for('auth.login') }}" class="stack">
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <label>Mot de passe
+      <input type="password" name="password" autocomplete="current-password" required autofocus>
+    </label>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    <button type="submit" class="primary">Entrer</button>
+  </form>
+  <p><a href="{{ url_for('routes.game') }}">← Retour au jeu</a></p>
+</main>
+{% endblock %}
