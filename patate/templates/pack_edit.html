@@ -1,38 +1,50 @@
 {% extends "base.html" %}
-{% block title %}Settings — {{ pack.name }}{% endblock %}
+{% block title %}Patate — {{ pack.name }}{% endblock %}
 {% block body_class %}page-admin{% endblock %}
 {% block body %}
 {% include "_admin_header.html" %}
 <main class="panel" id="pack-editor" data-pack="{{ pack.id }}" data-readonly="{{ 'true' if pack.readonly else 'false' }}">
-  <h1>{{ pack.name }}</h1>
+  <p class="crumbs"><a href="{{ url_for('routes.settings') }}">Mes packs</a> › {{ pack.name }}</p>
+  <div class="title-row">
+    <h1>{{ pack.name }}</h1>
+    {% if pack.readonly %}<span class="tag">par défaut · non modifiable</span>
+    {% elif pack.private %}<span class="tag tag-private">🔒 privé</span>
+    {% else %}<span class="tag tag-public">public</span>{% endif %}
+    <a class="button primary push" href="{{ url_for('routes.game') }}?pack={{ pack.id }}">▶ Jouer avec ce pack</a>
+  </div>
+
   {% if pack.readonly %}
-    <p class="muted">Pack par défaut, en lecture seule. Crée un nouveau pack pour utiliser tes propres images et sons.</p>
+    <p class="muted">C'est le pack du jeu par défaut ; il ne peut pas être modifié.
+      Pour utiliser tes propres images, <a href="{{ url_for('routes.settings') }}">crée un nouveau pack</a>.</p>
   {% else %}
-  <form id="pack-meta" class="row wrap">
+  <form id="pack-meta" class="card stack">
+    <h2>Réglages</h2>
     <label>Nom <input type="text" name="name" value="{{ pack.name }}" maxlength="60" required></label>
+    <label class="check"><input type="checkbox" name="private" {% if pack.private %}checked{% endif %}>
+      🔒 Privé : visible seulement après avoir saisi le mot de passe</label>
     <label class="check"><input type="checkbox" name="crop_circle" {% if pack.crop_circle %}checked{% endif %}>
       Découper les images en cercle (conseillé pour des photos)</label>
-    <button type="submit">Enregistrer</button>
+    <div><button type="submit">Enregistrer les réglages</button></div>
   </form>
 
-  <section class="import">
-    <h2>Importer un dossier</h2>
+  <section class="card import">
+    <h2>Ajouter plusieurs fichiers d'un coup</h2>
     <p class="muted">Choisis un dossier (ou plusieurs fichiers) d'images et de sons. Un fichier nommé comme un niveau
       (« cerise.jpg », « 3.mp3 »…) va dans ce niveau ; les autres remplissent les niveaux restants
       <strong>par ordre alphabétique</strong>, du plus petit au plus gros. Images et sons sont rangés séparément.</p>
     <div class="row wrap">
-      <label class="file-btn">Choisir un dossier<input type="file" id="import-dir" webkitdirectory multiple></label>
+      <label class="file-btn primary">Choisir un dossier<input type="file" id="import-dir" webkitdirectory multiple></label>
       <label class="file-btn">Choisir des fichiers<input type="file" id="import-files" multiple accept="image/*,.mp3,.wav,.ogg"></label>
     </div>
   </section>
   {% endif %}
-  <p id="msg" class="status" role="status"></p>
+  <p id="msg" class="status-msg" role="status"></p>
 
-  <h2>Niveaux</h2>
+  <h2>Les {{ LEVELS }} niveaux <span class="muted small">du plus petit au plus gros</span></h2>
   <ol class="slots">
     {% for l in pack.levels %}
     <li class="slot" data-level="{{ l.level }}">
-      <div class="slot-img">
+      <div class="slot-img {{ 'inherited' if l.image_inherited }}">
         {% if l.image_url %}<img src="{{ l.image_url }}" alt="">{% endif %}
         <span class="slot-num">{{ l.level + 1 }}</span>
       </div>
@@ -43,14 +55,16 @@
           <input type="text" class="label-input" value="{{ l.label }}" maxlength="40" aria-label="Nom du niveau {{ l.level + 1 }}">
         {% endif %}
         <p class="small muted">
-          Image : {{ 'pack Fruits' if l.image_inherited else ('personnalisée' if l.image_url else 'balle de secours') }} ·
-          Son : {{ 'pack Fruits' if l.sound_inherited else ('personnalisé' if l.sound_url else 'aucun') }}
+          {% if not pack.readonly %}
+          Image : {{ 'fruit par défaut' if l.image_inherited else ('la tienne' if l.image_url else 'balle de secours') }} ·
+          Son : {{ 'son par défaut' if l.sound_inherited else ('le tien' if l.sound_url else 'aucun') }}
+          {% endif %}
           {% if l.sound_url %}<button type="button" class="link play" data-src="{{ l.sound_url }}">▶ écouter</button>{% endif %}
         </p>
         {% if not pack.readonly %}
         <div class="row wrap">
-          <label class="file-btn small">Image…<input type="file" class="up" data-kind="image" accept="image/*"></label>
-          <label class="file-btn small">Son…<input type="file" class="up" data-kind="sound" accept=".mp3,.wav,.ogg,audio/*"></label>
+          <label class="file-btn small">{{ 'Changer l\'image' if (l.image_url and not l.image_inherited) else 'Ajouter une image' }}<input type="file" class="up" data-kind="image" accept="image/*"></label>
+          <label class="file-btn small">{{ 'Changer le son' if (l.sound_url and not l.sound_inherited) else 'Ajouter un son' }}<input type="file" class="up" data-kind="sound" accept=".mp3,.wav,.ogg,audio/*"></label>
           {% if l.image_url and not l.image_inherited %}<button type="button" class="link clear" data-kind="image">retirer l'image</button>{% endif %}
           {% if l.sound_url and not l.sound_inherited %}<button type="button" class="link clear" data-kind="sound">retirer le son</button>{% endif %}
         </div>
@@ -60,13 +74,12 @@
     {% endfor %}
   </ol>
 
+  {% if not pack.readonly %}
   <div class="row wrap">
-    <a class="button primary" href="{{ url_for('routes.game') }}?pack={{ pack.id }}">Jouer avec ce pack</a>
-    {% if not pack.readonly %}
-      <button type="button" id="save-labels">Enregistrer les noms</button>
-      <button type="button" id="delete-pack" class="danger">Supprimer le pack</button>
-    {% endif %}
+    <button type="button" id="save-labels">Enregistrer les noms des niveaux</button>
+    <button type="button" id="delete-pack" class="danger push">Supprimer le pack</button>
   </div>
+  {% endif %}
 </main>
 <script src="{{ url_for('static', filename='js/settings.js') }}"></script>
 {% endblock %}

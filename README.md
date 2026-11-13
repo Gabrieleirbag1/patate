@@ -38,7 +38,10 @@ Quand la flasque est pleine (balles immobiles dans le goulot pendant 3 s), la pa
 - créer, renommer et supprimer des packs ;
 - envoyer une image et/ou un son pour chacun des 8 niveaux (du plus petit au plus gros) ;
 - importer un dossier entier (par exemple des photos de proches). Un fichier nommé comme un niveau (`cerise.jpg`, `3.mp3`…) va dans ce niveau ; les autres remplissent les niveaux libres par ordre alphabétique ;
-- choisir si les images sont découpées en cercle (conseillé pour des photos).
+- choisir si les images sont découpées en cercle (conseillé pour des photos) ;
+- rendre un pack **privé** (coché par défaut pour un nouveau pack) : un invité ne le voit pas dans le jeu, et ses images et sons renvoient 404 sans le mot de passe.
+
+Le bandeau en haut du jeu indique toujours l'état : **Invité** (bouton « + Ajouter mes images & sons ») ou **Connecté** (packs privés visibles dans le menu, marqués 🔒, boutons « Gérer mes packs » et « Se déconnecter »).
 
 Le pack **Fruits** est celui par défaut et ne peut pas être modifié. Un niveau sans image ou sans son dans un pack perso reprend celui du pack Fruits.
 

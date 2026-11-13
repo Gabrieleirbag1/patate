@@ -1,18 +1,25 @@
 {% extends "base.html" %}
-{% block title %}Settings — mot de passe{% endblock %}
+{% block title %}Patate — mot de passe{% endblock %}
 {% block body_class %}page-admin{% endblock %}
 {% block body %}
+<header class="topbar is-guest">
+  <a class="brand" href="{{ url_for('routes.game') }}">Patate</a>
+  <span class="status status-off"><span class="dot" aria-hidden="true"></span> Invité</span>
+  <nav class="topbar-actions"><a class="button" href="{{ url_for('routes.game') }}">← Retour au jeu</a></nav>
+</header>
 <main class="panel narrow">
-  <h1>Settings</h1>
-  <p class="muted">L'ajout et la modification des images et des sons sont protégés par un mot de passe.</p>
-  <form method="post" action="{{ url_for('auth.login') }}" class="stack">
+  <h1>Ajouter tes images et tes sons</h1>
+  <p>Un <strong>pack</strong> remplace les fruits du jeu par tes propres images (des photos de proches, par exemple)
+    et tes propres sons. Les packs se créent et se modifient ici, après avoir saisi le mot de passe.</p>
+  <form method="post" action="{{ url_for('auth.login') }}" class="stack card">
     <input type="hidden" name="next" value="{{ next_url }}">
     <label>Mot de passe
       <input type="password" name="password" autocomplete="current-password" required autofocus>
     </label>
     {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
-    <button type="submit" class="primary">Entrer</button>
+    <button type="submit" class="primary">Se connecter</button>
   </form>
-  <p><a href="{{ url_for('routes.game') }}">← Retour au jeu</a></p>
+  <p class="muted small">Pas de compte à créer : un seul mot de passe, partagé. Une fois connecté, tu vois aussi
+    les packs privés dans le jeu, jusqu'à ce que tu te déconnectes.</p>
 </main>
 {% endblock %}

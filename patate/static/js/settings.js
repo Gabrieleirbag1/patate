@@ -43,7 +43,10 @@
     create.addEventListener("submit", (evt) => {
       evt.preventDefault();
       run("Création…", async () => {
-        const pack = await api("POST", "/api/packs", { name: create.elements.name.value });
+        const pack = await api("POST", "/api/packs", {
+          name: create.elements.name.value,
+          private: create.elements.private.checked,
+        });
         location.href = `/settings/${pack.id}`;
       });
     });
@@ -69,7 +72,11 @@
   meta.addEventListener("submit", (evt) => {
     evt.preventDefault();
     run("Enregistrement…", async () => {
-      await api("PATCH", base, { name: meta.elements.name.value, crop_circle: meta.elements.crop_circle.checked });
+      await api("PATCH", base, {
+        name: meta.elements.name.value,
+        crop_circle: meta.elements.crop_circle.checked,
+        private: meta.elements.private.checked,
+      });
       reload();
     });
   });

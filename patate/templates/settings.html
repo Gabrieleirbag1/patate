@@ -1,29 +1,51 @@
 {% extends "base.html" %}
-{% block title %}Settings — packs{% endblock %}
+{% block title %}Patate — mes packs{% endblock %}
 {% block body_class %}page-admin{% endblock %}
 {% block body %}
 {% include "_admin_header.html" %}
 <main class="panel">
-  <h1>Packs de médias</h1>
-  <p class="muted">Un pack contient {{ LEVELS }} niveaux, du plus petit au plus gros, avec pour chacun une image et un son.
-    Le pack « Fruits » est celui du jeu par défaut ; il ne peut pas être modifié.</p>
+  <h1>Mes packs</h1>
+  <p class="muted">Un pack remplace les {{ LEVELS }} fruits du jeu (du plus petit au plus gros) par tes propres images et sons.</p>
 
+  <section class="card create">
+    <h2>Ajouter un pack</h2>
+    <ol class="steps">
+      <li><strong>Donne-lui un nom</strong> ci-dessous (par exemple « Famille »).</li>
+      <li><strong>Ajoute tes images</strong> (et des sons si tu veux) : un dossier entier, ou niveau par niveau.</li>
+      <li><strong>Joue</strong> : choisis-le dans le menu « Pack » du jeu.</li>
+    </ol>
+    <form id="create-pack" class="stack">
+      <div class="row">
+        <input type="text" name="name" maxlength="60" placeholder="Nom du pack, ex. Famille" required aria-label="Nom du nouveau pack">
+        <button type="submit" class="primary">Créer le pack</button>
+      </div>
+      <label class="check"><input type="checkbox" name="private" checked>
+        Privé : visible seulement après avoir saisi le mot de passe</label>
+    </form>
+    <p id="msg" class="status-msg" role="status"></p>
+  </section>
+
+  <h2>Packs existants</h2>
   <ul class="pack-list">
     {% for p in packs %}
     <li>
-      <a href="{{ url_for('routes.pack_edit', pack_id=p.id) }}">{{ p.name }}</a>
-      {% if p.readonly %}<span class="tag">par défaut · lecture seule</span>{% endif %}
-      <a class="small" href="{{ url_for('routes.game') }}?pack={{ p.id }}">Jouer</a>
+      <div class="pack-info">
+        <a class="pack-name" href="{{ url_for('routes.pack_edit', pack_id=p.id) }}">{{ p.name }}</a>
+        <span class="tags">
+          {% if p.readonly %}<span class="tag">par défaut · non modifiable</span>
+          {% elif p.private %}<span class="tag tag-private">🔒 privé</span>
+          {% else %}<span class="tag tag-public">public</span>{% endif %}
+          {% if not p.readonly %}<span class="tag">{{ p.images }}/{{ LEVELS }} images · {{ p.sounds }}/{{ LEVELS }} sons</span>{% endif %}
+        </span>
+      </div>
+      <div class="pack-actions">
+        <a class="button" href="{{ url_for('routes.pack_edit', pack_id=p.id) }}">{{ 'Voir' if p.readonly else 'Modifier' }}</a>
+        <a class="button" href="{{ url_for('routes.game') }}?pack={{ p.id }}">Jouer</a>
+      </div>
     </li>
     {% endfor %}
   </ul>
-
-  <h2>Nouveau pack</h2>
-  <form id="create-pack" class="row">
-    <input type="text" name="name" maxlength="60" placeholder="ex. Famille" required>
-    <button type="submit" class="primary">Créer</button>
-  </form>
-  <p id="msg" class="error" role="alert"></p>
+  <p class="muted small">🔒 Un pack privé n'apparaît pas pour les invités : ses images et ses sons ne sont envoyés qu'aux navigateurs connectés.</p>
 </main>
 <script src="{{ url_for('static', filename='js/settings.js') }}"></script>
 {% endblock %}

@@ -627,7 +627,7 @@
         for (const p of packs) {
           const opt = document.createElement("option");
           opt.value = p.id;
-          opt.textContent = p.name;
+          opt.textContent = p.private ? `🔒 ${p.name}` : p.name;
           ui.select.appendChild(opt);
         }
         await usePack(packs.some((p) => p.id === wanted) ? wanted : "fruits");

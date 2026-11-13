@@ -1,5 +1,9 @@
-<header class="admin-header">
-  <a href="{{ url_for('routes.game') }}">← Jeu</a>
-  <a href="{{ url_for('routes.settings') }}">Packs</a>
-  <form method="post" action="{{ url_for('auth.logout') }}"><button type="submit" class="link">Se déconnecter</button></form>
+<header class="topbar is-admin">
+  <a class="brand" href="{{ url_for('routes.game') }}">Patate</a>
+  <span class="status status-on"><span class="dot" aria-hidden="true"></span> Connecté</span>
+  <nav class="topbar-actions" aria-label="Navigation">
+    <a class="button" href="{{ url_for('routes.game') }}">← Retour au jeu</a>
+    <a class="button" href="{{ url_for('routes.settings') }}">Mes packs</a>
+    <form method="post" action="{{ url_for('auth.logout') }}"><button type="submit">Se déconnecter</button></form>
+  </nav>
 </header>

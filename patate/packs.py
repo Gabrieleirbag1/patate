@@ -111,6 +111,7 @@ class PackStore:
         data["slots"] = slots
         data.setdefault("name", pack_id)
         data.setdefault("crop_circle", True)
+        data["private"] = pack_id != DEFAULT_ID and bool(data.get("private", False))
         return data
 
     def _save(self, pack_id, data):
@@ -123,11 +124,26 @@ class PackStore:
             raise PackError("Le pack « Fruits » est en lecture seule.", 403)
 
     # -- lecture --------------------------------------------------------------
-    def list(self):
-        packs = [{"id": DEFAULT_ID, "name": self._load(DEFAULT_ID)["name"], "readonly": True}]
-        for entry in sorted(os.listdir(self.root)):
-            if SLUG_RE.match(entry) and entry not in RESERVED_IDS and self.exists(entry):
-                packs.append({"id": entry, "name": self._load(entry)["name"], "readonly": False})
+    def is_private(self, pack_id):
+        """Pack privé : invisible (404) sans le mot de passe, médias compris."""
+        return pack_id != DEFAULT_ID and self._load(pack_id)["private"]
+
+    def list(self, include_private=False):
+        packs = []
+        ids = [DEFAULT_ID] + [e for e in sorted(os.listdir(self.root))
+                              if SLUG_RE.match(e) and e not in RESERVED_IDS and self.exists(e)]
+        for pack_id in ids:
+            data = self._load(pack_id)
+            if data["private"] and not include_private:
+                continue
+            packs.append({
+                "id": pack_id,
+                "name": data["name"],
+                "readonly": pack_id == DEFAULT_ID,
+                "private": data["private"],
+                "images": sum(1 for slot in data["slots"] if slot.get("image")),
+                "sounds": sum(1 for slot in data["slots"] if slot.get("sound")),
+            })
         return packs
 
     def media_path(self, pack_id, filename):
@@ -162,11 +178,12 @@ class PackStore:
             "name": data["name"],
             "crop_circle": bool(data["crop_circle"]),
             "readonly": pack_id == DEFAULT_ID,
+            "private": data["private"],
             "levels": levels,
         }
 
     # -- écriture -------------------------------------------------------------
-    def create(self, name):
+    def create(self, name, private=True):
         name = (name or "").strip()[:60]
         if not name:
             raise PackError("Donne un nom au pack.")
@@ -179,7 +196,8 @@ class PackStore:
             k += 1
         os.makedirs(self.pack_dir(slug))
         default_labels = [s["label"] for s in self._load(DEFAULT_ID)["slots"]]
-        self._save(slug, {"name": name, "crop_circle": True, "slots": _empty_slots(default_labels)})
+        self._save(slug, {"name": name, "crop_circle": True, "private": bool(private),
+                          "slots": _empty_slots(default_labels)})
         return slug
 
     def delete(self, pack_id):
@@ -188,7 +206,7 @@ class PackStore:
             raise PackError("Pack introuvable.", 404)
         shutil.rmtree(self.pack_dir(pack_id))
 
-    def update(self, pack_id, name=None, crop_circle=None, labels=None):
+    def update(self, pack_id, name=None, crop_circle=None, labels=None, private=None):
         self._check_writable(pack_id)
         data = self._load(pack_id)
         if name is not None:
@@ -198,6 +216,8 @@ class PackStore:
             data["name"] = name
         if crop_circle is not None:
             data["crop_circle"] = bool(crop_circle)
+        if private is not None:
+            data["private"] = bool(private)
         if labels is not None:
             if not isinstance(labels, list) or len(labels) != LEVELS:
                 raise PackError(f"Il faut exactement {LEVELS} libellés.")
