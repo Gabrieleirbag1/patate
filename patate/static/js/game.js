@@ -181,7 +181,7 @@
   // STYLE « CARNET À DESSIN » : traits de crayon, couleurs de surligneur
   // --------------------------------------------------------------------------
   const INK = "#2c2a35";
-  const PAPER = "#fffcf2";
+  const STAGE_PAPER = "#e8f6ec";        // même couleur que --stage-paper dans style.css
   const PASTELS = ["#ffe066", "#ffa8c9", "#a6e8a6", "#a9d4ff", "#ffc078", "#d4c2ff"];
   const HAND_FONT = '"Gochi Hand", "Patrick Hand", "Comic Sans MS", cursive';
 
@@ -259,17 +259,15 @@
     constructor() {
       this.t = 0;
       const [base, ctx] = makeCanvas(WIDTH, HEIGHT);
-      ctx.fillStyle = PAPER;
+      // papier menthe à pois : se distingue du cahier quadrillé du reste du site
+      ctx.fillStyle = STAGE_PAPER;
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
-      ctx.strokeStyle = "rgba(70,130,210,0.16)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (let x = 15; x < WIDTH; x += 30) { ctx.moveTo(x, 0); ctx.lineTo(x, HEIGHT); }
-      for (let y = 15; y < HEIGHT; y += 30) { ctx.moveTo(0, y); ctx.lineTo(WIDTH, y); }
-      ctx.stroke();
-      ctx.strokeStyle = "rgba(232,85,100,0.35)";           // marge de cahier
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(36, 0); ctx.lineTo(36, HEIGHT); ctx.stroke();
+      ctx.fillStyle = "rgba(40,120,80,0.22)";
+      for (let x = 15; x < WIDTH; x += 30) {
+        for (let y = 15; y < HEIGHT; y += 30) {
+          ctx.beginPath(); ctx.arc(x, y, 1.6, 0, TAU); ctx.fill();
+        }
+      }
       this.base = base;
 
       const kinds = ["star", "star", "heart", "dot", "spiral", "wave"];
