@@ -54,3 +54,8 @@ data/secret_key           clé de session générée au premier lancement
 ```
 
 Les images du pack Fruits sont des fruits dessinés simples, et ses sons sont pour l'instant des MP3 silencieux (0,3 s) : remplace `patate/default_pack/snd_N.mp3` par de vrais sons (niveau 0 = cerise … 7 = pastèque). Les images envoyées sont converties en PNG de 512 px maximum ; les sons acceptés sont MP3, WAV et OGG.
+
+## Crédits
+
+- Moteur physique : [Planck.js](https://github.com/piqnt/planck.js) (licence MIT), copié dans `patate/static/vendor/`.
+- Polices manuscrites : [Patrick Hand](https://fonts.google.com/specimen/Patrick+Hand) et [Gochi Hand](https://fonts.google.com/specimen/Gochi+Hand) (SIL Open Font License), copiées dans `patate/static/fonts/`.

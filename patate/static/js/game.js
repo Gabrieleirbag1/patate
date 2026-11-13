@@ -75,7 +75,6 @@
   // OUTILS
   // --------------------------------------------------------------------------
   const lerp = (a, b, t) => a + (b - a) * t;
-  const lerpColor = (c1, c2, t) => c1.map((a, i) => Math.round(lerp(a, c2[i], t)));
   const rgba = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
   const rand = (a, b) => a + Math.random() * (b - a);
   const randInt = (a, b) => Math.floor(rand(a, b + 1));
@@ -152,8 +151,8 @@
       ctx.beginPath(); ctx.arc(radius, radius, radius, 0, TAU); ctx.clip();
       ctx.drawImage(img, sx, sy, s, s, 0, 0, d, d);
       ctx.restore();
-      ctx.lineWidth = Math.max(1.5, radius / 18);
-      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.lineWidth = Math.max(2, radius / 14);
+      ctx.strokeStyle = INK;
       ctx.beginPath(); ctx.arc(radius, radius, radius - ctx.lineWidth / 2, 0, TAU); ctx.stroke();
     } else {
       ctx.drawImage(img, 0, 0, d, d);        // comme final.py : image étirée au carré
@@ -179,99 +178,118 @@
   }
 
   // --------------------------------------------------------------------------
-  // ARRIÈRE-PLAN : dégradé, lueurs, étoiles scintillantes, bokeh qui montent, vignette
+  // STYLE « CARNET À DESSIN » : traits de crayon, couleurs de surligneur
   // --------------------------------------------------------------------------
-  function radialGlow(ctx, x, y, radius, color, strength) {
-    // opacité = strength * (1 - t)², t = distance / rayon
-    const g = ctx.createRadialGradient(x, y, 0, x, y, radius);
-    for (let k = 0; k <= 10; k++) {
-      const t = k / 10;
-      g.addColorStop(t, rgba(color, strength * (1 - t) ** 2));
-    }
-    ctx.fillStyle = g;
-    ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+  const INK = "#2c2a35";
+  const PAPER = "#fffcf2";
+  const PASTELS = ["#ffe066", "#ffa8c9", "#a6e8a6", "#a9d4ff", "#ffc078", "#d4c2ff"];
+  const HAND_FONT = '"Gochi Hand", "Patrick Hand", "Comic Sans MS", cursive';
+
+  function tracePath(ctx, pts, close = false) {
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    if (close) ctx.closePath();
   }
 
-  function makeBokeh(radius, color, alpha) {
-    const size = radius * 2 + 2;
-    const [c, ctx] = makeCanvas(size, size);
-    const m = size / 2;
-    ctx.fillStyle = rgba(color, (alpha * 0.45) / 255);
-    ctx.beginPath(); ctx.arc(m, m, radius, 0, TAU); ctx.fill();
-    const w = Math.max(1, radius / 7);
-    ctx.strokeStyle = rgba(color, alpha / 255);
-    ctx.lineWidth = w;
-    ctx.beginPath(); ctx.arc(m, m, radius - w / 2, 0, TAU); ctx.stroke();
+  /** Trait « au crayon » : plusieurs passages légèrement décalés. */
+  function sketchLine(ctx, pts, color, width, jitter = 1, passes = 2) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    for (let p = 0; p < passes; p++) {
+      ctx.globalAlpha = p === 0 ? 1 : 0.5;
+      tracePath(ctx, pts.map(([x, y]) => [x + rand(-jitter, jitter), y + rand(-jitter, jitter)]));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** Petits dessins d'enfant : étoile, cœur, rond, spirale, vague. */
+  function makeDoodle(kind, size, color) {
+    const pad = 5, S = size + pad * 2;
+    const [c, ctx] = makeCanvas(S, S);
+    const m = S / 2, r = size / 2;
+    const pts = [];
+    if (kind === "star") {
+      for (let i = 0; i <= 10; i++) {
+        const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.45 : r;
+        pts.push([m + Math.cos(a) * rr, m + Math.sin(a) * rr]);
+      }
+    } else if (kind === "heart") {
+      for (let i = 0; i <= 40; i++) {
+        const t = (i / 40) * TAU;
+        const x = 16 * Math.sin(t) ** 3;
+        const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+        pts.push([m + (x * r) / 17, m + (y * r) / 17 + r * 0.05]);
+      }
+    } else if (kind === "dot") {
+      const start = rand(0, TAU);
+      for (let i = 0; i <= 30; i++) {
+        const a = start + (i / 28) * TAU;      // dépasse un peu : on referme comme à la main
+        pts.push([m + Math.cos(a) * r * 0.8, m + Math.sin(a) * r * 0.8]);
+      }
+    } else if (kind === "spiral") {
+      for (let i = 0; i <= 60; i++) {
+        const a = (i / 60) * TAU * 2.3, rr = (i / 60) * r;
+        pts.push([m + Math.cos(a) * rr, m + Math.sin(a) * rr]);
+      }
+    } else {                                   // vague
+      for (let i = 0; i <= 30; i++) {
+        const t = i / 30;
+        pts.push([m - r + 2 * r * t, m + Math.sin(t * TAU * 1.5) * r * 0.35]);
+      }
+    }
+    const filled = kind === "star" || kind === "heart" || kind === "dot";
+    if (filled) {
+      ctx.fillStyle = color;
+      tracePath(ctx, pts.map(([x, y]) => [x + 1.5, y + 1.5]), true);   // couleur un peu à côté du trait
+      ctx.fill();
+    }
+    sketchLine(ctx, pts, filled ? INK : color, filled ? 1.8 : 3, 0.5, filled ? 2 : 1);
     return c;
   }
 
+  // --------------------------------------------------------------------------
+  // ARRIÈRE-PLAN : feuille quadrillée + petits gribouillis qui flottent
+  // (remplace le ciel étoilé de final.py, même rôle : décor animé)
+  // --------------------------------------------------------------------------
   class Background {
     constructor() {
       this.t = 0;
-      const big = Math.max(WIDTH, HEIGHT);
       const [base, ctx] = makeCanvas(WIDTH, HEIGHT);
-      const grad = ctx.createLinearGradient(0, 0, 0, HEIGHT);
-      grad.addColorStop(0.00, "rgb(12,12,40)");
-      grad.addColorStop(0.40, "rgb(44,30,98)");
-      grad.addColorStop(0.75, "rgb(112,52,132)");
-      grad.addColorStop(1.00, "rgb(200,94,128)");
-      ctx.fillStyle = grad;
+      ctx.fillStyle = PAPER;
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
-      for (const [px, py, rad, col, strength] of [
-        [WIDTH * 0.50, HEIGHT * 0.52, big * 0.60, [130, 110, 255], 0.30],   // halo derrière la flasque
-        [WIDTH * 0.10, HEIGHT * 0.18, big * 0.34, [255, 120, 200], 0.20],
-        [WIDTH * 0.92, HEIGHT * 0.78, big * 0.38, [80, 200, 255], 0.18],
-      ]) radialGlow(ctx, px, py, rad, col, strength);
+      ctx.strokeStyle = "rgba(70,130,210,0.16)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = 15; x < WIDTH; x += 30) { ctx.moveTo(x, 0); ctx.lineTo(x, HEIGHT); }
+      for (let y = 15; y < HEIGHT; y += 30) { ctx.moveTo(0, y); ctx.lineTo(WIDTH, y); }
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(232,85,100,0.35)";           // marge de cahier
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(36, 0); ctx.lineTo(36, HEIGHT); ctx.stroke();
       this.base = base;
 
-      // étoiles : la couleur du fond sous chaque étoile est mémorisée pour le scintillement
-      const pixels = ctx.getImageData(0, 0, base.width, base.height).data;
-      this.stars = [];
-      for (let i = 0; i < 110; i++) {
-        const x = randInt(0, WIDTH - 1), y = randInt(0, Math.floor(HEIGHT * 0.62) - 1);
-        const o = (Math.floor(y * RES) * base.width + Math.floor(x * RES)) * 4;
-        this.stars.push({
-          x, y,
-          size: choice([1, 1, 1, 2]),
-          bg: [pixels[o], pixels[o + 1], pixels[o + 2]],
-          phase: rand(0, TAU),
-          speed: rand(0.8, 2.4),
-        });
-      }
-
-      // bokeh qui montent lentement
-      const palette = [[255, 170, 220], [150, 190, 255], [190, 160, 255], [255, 220, 170], [140, 235, 230]];
-      this.bokeh = [];
-      for (let i = 0; i < 36; i++) {
-        const radius = randInt(5, 24);
-        this.bokeh.push({
-          sprite: makeBokeh(radius, choice(palette), randInt(40, 105)),
-          size: radius * 2 + 2,
+      const kinds = ["star", "star", "heart", "dot", "spiral", "wave"];
+      this.doodles = [];
+      for (let i = 0; i < 26; i++) {
+        const size = randInt(14, 34);
+        this.doodles.push({
+          sprite: makeDoodle(choice(kinds), size, choice(PASTELS)),
+          size: size + 10,
           x: rand(0, WIDTH), y: rand(0, HEIGHT),
-          vy: rand(8, 26), sway: rand(6, 22),
+          vy: rand(6, 16), sway: rand(6, 18),
           freq: rand(0.3, 0.9), phase: rand(0, TAU),
+          tilt: rand(0.1, 0.35),
         });
       }
-
-      // vignette : bords assombris (alpha 130/255 au bord, s^2.2 vers le centre)
-      const [vig, vctx] = makeCanvas(WIDTH, HEIGHT);
-      vctx.save();
-      vctx.translate(WIDTH / 2, HEIGHT / 2);
-      vctx.scale(WIDTH * 0.75, HEIGHT * 0.75);
-      const vg = vctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-      for (let k = 0; k <= 12; k++) {
-        const s = k / 12;
-        vg.addColorStop(s, `rgba(0,0,0,${(130 / 255) * s ** 2.2})`);
-      }
-      vctx.fillStyle = vg;
-      vctx.fillRect(-2, -2, 4, 4);
-      vctx.restore();
-      this.vignette = vig;
     }
 
     update(dt) {
       this.t += dt;
-      for (const p of this.bokeh) {
+      for (const p of this.doodles) {
         p.y -= p.vy * dt;
         if (p.y < -p.size) {
           p.y = HEIGHT + p.size;
@@ -282,16 +300,17 @@
 
     draw(ctx) {
       ctx.drawImage(this.base, 0, 0, WIDTH, HEIGHT);
-      for (const s of this.stars) {
-        const b = 0.5 + 0.5 * Math.sin(this.t * s.speed + s.phase);
-        ctx.fillStyle = rgba(lerpColor(s.bg, [255, 255, 255], 0.25 + 0.7 * b));
-        ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, TAU); ctx.fill();
+      ctx.save();
+      ctx.globalAlpha = 0.75;
+      for (const p of this.doodles) {
+        const wave = Math.sin(this.t * p.freq + p.phase);
+        ctx.save();
+        ctx.translate(p.x + wave * p.sway, p.y);
+        ctx.rotate(wave * p.tilt);
+        ctx.drawImage(p.sprite, -p.size / 2, -p.size / 2, p.size, p.size);
+        ctx.restore();
       }
-      for (const p of this.bokeh) {
-        const x = p.x + Math.sin(this.t * p.freq + p.phase) * p.sway;
-        ctx.drawImage(p.sprite, x - p.size / 2, p.y - p.size / 2, p.size, p.size);
-      }
-      ctx.drawImage(this.vignette, 0, 0, WIDTH, HEIGHT);
+      ctx.restore();
     }
   }
 
@@ -343,43 +362,47 @@
       });
     }
 
-    /** Couches du verre, calculées une seule fois (sans coût pendant la simulation). */
+    /** Couches du verre, dessinées une seule fois (sans coût pendant la simulation). */
     static render(path, hl) {
+      // arrière : lavis d'aquarelle bleu dans la flasque (deux couches un peu décalées)
       const [back, bctx] = makeCanvas(WIDTH, HEIGHT);
-      bctx.fillStyle = "rgba(170,210,255,0.12)";
-      bctx.beginPath();
-      path.forEach(([x, y], i) => (i ? bctx.lineTo(x, y) : bctx.moveTo(x, y)));
-      bctx.closePath();
-      bctx.fill();
+      bctx.fillStyle = "rgba(169,212,255,0.20)";
+      tracePath(bctx, path, true); bctx.fill();
+      bctx.fillStyle = "rgba(169,212,255,0.14)";
+      tracePath(bctx, offsetPath(path, 14).map(([x, y]) => [x + 3, y + 4]), true); bctx.fill();
 
+      // avant : verre bleuté cerné au crayon, reflets en traits blancs
       const [front, ctx] = makeCanvas(WIDTH, HEIGHT);
-      strokePolyline(ctx, path, "rgba(200,228,255,0.41)", WALL_RADIUS * 2);
-      strokePolyline(ctx, offsetPath(path, WALL_RADIUS), "rgba(255,255,255,0.75)", 2);
-      strokePolyline(ctx, offsetPath(path, -WALL_RADIUS), "rgba(190,215,255,0.43)", 2);
+      strokePolyline(ctx, path, "rgba(169,212,255,0.6)", WALL_RADIUS * 2);
+      sketchLine(ctx, offsetPath(path, WALL_RADIUS), INK, 2.6, 0.8, 2);
+      sketchLine(ctx, offsetPath(path, -WALL_RADIUS), INK, 2.6, 0.8, 2);
 
       // collerette du goulot
       const nx = FLASK_NECK_W / 2;
       const lipW = WALL_RADIUS * 2 + 14;
       for (const x of [FLASK_CX - nx - lipW / 2, FLASK_CX + nx - lipW / 2]) {
         ctx.beginPath(); ctx.roundRect(x, FLASK_TOP - 9, lipW, 14, 7);
-        ctx.fillStyle = "rgba(205,230,255,0.59)"; ctx.fill();
-        ctx.beginPath(); ctx.roundRect(x + 1, FLASK_TOP - 8, lipW - 2, 12, 6);
-        ctx.lineWidth = 2; ctx.strokeStyle = "rgba(255,255,255,0.82)"; ctx.stroke();
+        ctx.fillStyle = "#cfe6ff"; ctx.fill();
+        ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke();
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath(); ctx.roundRect(x + 1.5, FLASK_TOP - 8, lipW - 1, 13, 7); ctx.stroke();
+        ctx.globalAlpha = 1;
       }
 
-      // reflets : longue traînée à gauche, plus courte à droite
+      // reflets : longue traînée à gauche, plus courte à droite (en pointillés de craie)
       const [i0, i1] = hl;
       const far = offsetPath(path, WALL_RADIUS + 13);
       const leftHl = far.slice(i0, i1);
       const rightHl = [];
       for (let j = i0; j < i0 + Math.floor((i1 - i0) / 2); j++) rightHl.push(far[far.length - 1 - j]);
-      strokePolyline(ctx, leftHl, "rgba(255,255,255,0.22)", 9);
-      strokePolyline(ctx, leftHl, "rgba(255,255,255,0.59)", 3);
-      strokePolyline(ctx, rightHl, "rgba(255,255,255,0.16)", 6);
-      strokePolyline(ctx, rightHl, "rgba(255,255,255,0.43)", 2);
-      const [sx, sy] = far[Math.max(0, i0 - 7)];      // petit point de lumière sur l'épaulement
-      ctx.fillStyle = "rgba(255,255,255,0.67)";
-      ctx.beginPath(); ctx.arc(sx, sy, 3, 0, TAU); ctx.fill();
+      ctx.save();
+      ctx.setLineDash([26, 12, 6, 12]);
+      strokePolyline(ctx, leftHl, "rgba(255,255,255,0.95)", 5);
+      strokePolyline(ctx, rightHl, "rgba(255,255,255,0.85)", 4);
+      ctx.restore();
+      const [sx, sy] = far[Math.max(0, i0 - 7)];      // petit éclat sur l'épaulement
+      sketchLine(ctx, [[sx - 6, sy], [sx + 6, sy]], "#fff", 3, 0.3, 1);
+      sketchLine(ctx, [[sx, sy - 6], [sx, sy + 6]], "#fff", 3, 0.3, 1);
       return { back, front };
     }
   }
@@ -551,14 +574,21 @@
       for (const ball of this.balls) ball.draw(ctx, this.sprites);
       ctx.drawImage(this.glass.front, 0, 0, WIDTH, HEIGHT);
 
-      ctx.font = "600 24px system-ui, sans-serif";
-      ctx.textBaseline = "top";
-      const label = (text, y, color) => {
-        ctx.fillStyle = "rgb(10,8,30)"; ctx.fillText(text, 17, y + 2);
-        ctx.fillStyle = color; ctx.fillText(text, 15, y);
+      ctx.textBaseline = "middle";
+      const label = (text, y, size, marker) => {
+        ctx.font = `${size}px ${HAND_FONT}`;
+        const w = ctx.measureText(text).width;
+        ctx.save();
+        ctx.fillStyle = marker;                  // coup de surligneur légèrement penché
+        ctx.translate(16, y);
+        ctx.rotate(-0.02);
+        ctx.fillRect(-4, -size * 0.12, w + 12, size * 0.5);
+        ctx.restore();
+        ctx.fillStyle = INK;
+        ctx.fillText(text, 18, y);
       };
-      label(`Score : ${this.score}`, 13, "#fff");
-      if (this.speed > 1) label(`Vitesse : x${this.speed}`, 41, "rgb(255,220,120)");
+      label(`Score : ${this.score}`, 30, 34, "rgba(255,224,102,0.85)");
+      if (this.speed > 1) label(`Vitesse x${this.speed}`, 66, 26, "rgba(255,168,201,0.85)");
     }
   }
 
@@ -588,18 +618,25 @@
       overlay: document.getElementById("start"),
       select: document.getElementById("pack"),
       auto: document.getElementById("btn-auto"),
-      speed: document.getElementById("btn-speed"),
       sound: document.getElementById("btn-sound"),
+      speed: document.getElementById("speed"),
     };
+    // boutons de vitesse x1 x2 x4 ... (la touche F les fait défiler, comme final.py)
+    const speedButtons = SPEED_LEVELS.map((level, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = `x${level}`;
+      b.addEventListener("click", () => { sim.speedIndex = i; refreshButtons(); });
+      ui.speed.appendChild(b);
+      return b;
+    });
     let currentPack = null;
     let running = false;
 
     function refreshButtons() {
-      ui.auto.textContent = AUTO_SPAWN ? "Auto : oui" : "Auto : non";
-      ui.auto.setAttribute("aria-pressed", String(AUTO_SPAWN));
-      ui.speed.textContent = `Vitesse x${sim.speed}`;
-      ui.sound.textContent = voices.muted ? "Son : non" : "Son : oui";
-      ui.sound.setAttribute("aria-pressed", String(!voices.muted));
+      ui.auto.setAttribute("aria-checked", String(AUTO_SPAWN));
+      ui.sound.setAttribute("aria-checked", String(!voices.muted));
+      speedButtons.forEach((b, i) => b.setAttribute("aria-pressed", String(i === sim.speedIndex)));
     }
 
     async function usePack(id) {
@@ -666,7 +703,6 @@
     });
     document.getElementById("btn-drop").addEventListener("click", () => running ? sim.spawn() : start());
     ui.auto.addEventListener("click", () => { AUTO_SPAWN = !AUTO_SPAWN; refreshButtons(); });
-    ui.speed.addEventListener("click", () => { sim.cycleSpeed(); refreshButtons(); });
     document.getElementById("btn-reset").addEventListener("click", () => sim.reset());
     ui.sound.addEventListener("click", () => { voices.muted = !voices.muted; voices.stop(); refreshButtons(); });
     ui.select.addEventListener("change", () => { ui.select.blur(); usePack(ui.select.value); });
@@ -691,12 +727,17 @@
       refreshButtons();
     });
 
-    // après un clic sur un bouton, on rend le focus à la page pour garder les raccourcis clavier
-    document.querySelectorAll(".toolbar button").forEach((b) => b.addEventListener("click", () => b.blur()));
-
+    // après un clic de souris sur un bouton, on rend le focus à la page pour garder les raccourcis
+    // clavier (un bouton activé au clavier garde son focus)
+    document.querySelectorAll(".launcher button").forEach((b) => b.addEventListener("click", (evt) => {
+      if (evt.detail > 0) b.blur();
+    }));
     refreshButtons();
     sim.draw(ctx);                      // image fixe derrière l'écran de démarrage
     initPacks().then(() => { if (!running) sim.draw(ctx); });
+    if (document.fonts) {                // l'écriture à la main du score, dès que la police est là
+      document.fonts.load(`34px ${HAND_FONT}`).then(() => { if (!running) sim.draw(ctx); }).catch(() => {});
+    }
   }
 
   document.addEventListener("DOMContentLoaded", main);

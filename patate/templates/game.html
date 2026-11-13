@@ -3,7 +3,7 @@
 {% block body_class %}page-game{% endblock %}
 {% block body %}
 <header class="topbar {{ 'is-admin' if is_admin else 'is-guest' }}">
-  <span class="brand">Patate</span>
+  <a class="brand" href="{{ url_for('routes.game') }}"><span class="brand-mark" aria-hidden="true">🥔</span> Patate</a>
   {% if is_admin %}
     <span class="status status-on" title="Le mot de passe a été saisi sur ce navigateur">
       <span class="dot" aria-hidden="true"></span> Connecté · packs privés visibles
@@ -13,9 +13,7 @@
       <form method="post" action="{{ url_for('auth.logout') }}"><button type="submit">Se déconnecter</button></form>
     </div>
   {% else %}
-    <span class="status status-off">
-      <span class="dot" aria-hidden="true"></span> Invité
-    </span>
+    <span class="status status-off"><span class="dot" aria-hidden="true"></span> Invité</span>
     <div class="topbar-actions">
       <a class="button primary" href="{{ url_for('auth.login', next='/settings') }}"
          title="Remplacer les fruits par tes propres images et sons (mot de passe requis)">+ Ajouter mes images &amp; sons</a>
@@ -27,21 +25,47 @@
   <div class="stage">
     <canvas id="game" aria-label="Simulation : des balles tombent dans une flasque et fusionnent"></canvas>
     <button id="start" class="start" type="button">
-      <span class="start-title">Patate</span>
-      <span class="start-sub">Cliquer pour démarrer (active le son)</span>
+      <span class="start-title">Patate !</span>
+      <span class="start-sub">Clique pour démarrer <span aria-hidden="true">✏️</span></span>
+      <span class="start-note">(ça active aussi le son)</span>
     </button>
   </div>
-  <nav class="toolbar" aria-label="Contrôles">
-    <label class="pack-picker">Pack
+
+  <aside class="launcher" aria-label="Lanceur de patates">
+    <h2 class="launcher-title">Le lanceur</h2>
+
+    <label class="field">
+      <span class="field-label">Pack d'images</span>
       <select id="pack"><option value="fruits">Fruits</option></select>
     </label>
-    <button id="btn-drop" type="button" title="Espace">Lâcher</button>
-    <button id="btn-auto" type="button" title="A">Auto</button>
-    <button id="btn-speed" type="button" title="F">Vitesse x1</button>
-    <button id="btn-reset" type="button" title="R">Réinitialiser</button>
-    <button id="btn-sound" type="button">Son</button>
-  </nav>
-  <p class="hint">Clic : lâcher une balle · Espace : lâcher · A : auto · F : vitesse · R : réinitialiser</p>
+
+    <button id="btn-drop" class="drop" type="button">
+      Lâcher une patate !
+      <kbd>Espace</kbd>
+    </button>
+
+    <div class="switch-row">
+      <span id="lbl-auto">Lâcher tout seul <kbd>A</kbd></span>
+      <button id="btn-auto" class="switch" type="button" role="switch" aria-checked="true" aria-labelledby="lbl-auto">
+        <span class="knob" aria-hidden="true"></span>
+      </button>
+    </div>
+    <div class="switch-row">
+      <span id="lbl-sound">Son</span>
+      <button id="btn-sound" class="switch" type="button" role="switch" aria-checked="true" aria-labelledby="lbl-sound">
+        <span class="knob" aria-hidden="true"></span>
+      </button>
+    </div>
+
+    <div class="field">
+      <span class="field-label" id="lbl-speed">Vitesse <kbd>F</kbd></span>
+      <div class="segmented" id="speed" role="group" aria-labelledby="lbl-speed"></div>
+    </div>
+
+    <button id="btn-reset" class="reset" type="button">↺ Recommencer <kbd>R</kbd></button>
+
+    <p class="launcher-tip">Astuce : clique dans la flasque pour lâcher une patate à l'endroit voulu.</p>
+  </aside>
 </main>
 <script src="{{ url_for('static', filename='vendor/planck.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/audio.js') }}"></script>
