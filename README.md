@@ -9,18 +9,39 @@ C'est le portage web de `final.py` (pygame/pymunk). La simulation tourne dans le
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-cp .env.example .env               # puis choisis ton mot de passe dans .env
-.venv/bin/python app.py            # http://127.0.0.1:5000
+echo 'PATATE_PASSWORD=ton-mot-de-passe' > .env
+.venv/bin/python app.py            # http://127.0.0.1:6767
 ```
 
-Les réglages se font dans le fichier **`.env`** à la racine (ignoré par git ; modèle : `.env.example`). Une vraie variable d'environnement garde la priorité sur le fichier.
+Les réglages se font dans le fichier **`.env`** à la racine (ignoré par git). Il suffit d'une ligne `PATATE_PASSWORD=...`. Une vraie variable d'environnement garde la priorité sur le fichier.
 
 | Variable            | Défaut                    | Rôle                                        |
 |---------------------|---------------------------|---------------------------------------------|
 | `PATATE_PASSWORD`   | *aucun* (obligatoire)     | mot de passe des Settings ; vide = Settings fermés |
 | `PATATE_SECRET_KEY` | générée dans `data/`      | signature du cookie de session              |
 | `PATATE_DATA_DIR`   | `./data`                  | dossier des packs personnalisés             |
-| `HOST` / `PORT`     | `127.0.0.1` / `5000`      | adresse d'écoute (`HOST=0.0.0.0` pour le réseau local) |
+| `HOST` / `PORT`     | `127.0.0.1` / `6767`      | adresse d'écoute (`HOST=0.0.0.0` pour le réseau local) |
+
+## Déployer avec Docker (derrière Apache)
+
+```bash
+git clone https://github.com/Gabrieleirbag1/patate.git && cd patate
+echo 'PATATE_PASSWORD=ton-mot-de-passe' > .env   # (sinon le script crée un .env vide)
+./server_patate.sh -b              # construit l'image (à refaire après chaque git pull)
+./server_patate.sh                 # lance le conteneur sur 127.0.0.1:8090
+```
+
+`server_patate.sh` : sans option = démarrer, `-it` = démarrer en interactif, `-s` = arrêter, `-r` = redémarrer (après un changement de `.env`), `-b` = construire l'image.
+Le conteneur tourne avec gunicorn, sous l'UID de l'utilisateur courant ; `data/` (packs perso, clé de session) et `.env` restent sur l'hôte et sont montés au lancement ; les logs vont dans `logs/AAAA-MM-JJ.log`. Le port se change avec `HOST_PORT=…`.
+
+La conf Apache (port 80, reverse proxy vers le conteneur) est dans `deploy/patate.conf` :
+
+```bash
+sudo a2enmod proxy proxy_http
+sudo cp deploy/patate.conf /etc/apache2/sites-available/patate.conf   # puis y mettre ton domaine
+sudo a2ensite patate && sudo apache2ctl configtest && sudo systemctl reload apache2
+sudo certbot --apache -d ton-domaine        # HTTPS
+```
 
 ## Jouer
 

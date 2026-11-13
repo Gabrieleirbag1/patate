@@ -1,0 +1,17 @@
+# Seuls app.py, patate/ et requirements.txt entrent dans l'image.
+.git
+.gitignore
+.venv
+__pycache__/
+*.pyc
+.env
+.env.*
+data/
+logs/
+final.py
+images/
+sons/
+Dockerfile
+.dockerignore
+server_patate.sh
+README.md

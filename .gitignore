@@ -221,3 +221,6 @@ __marimo__/
 
 # Patate web : packs personnalisés, clé secrète
 data/
+
+# Patate : logs du conteneur écrits par server_patate.sh
+logs/
