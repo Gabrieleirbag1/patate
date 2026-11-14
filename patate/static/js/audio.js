@@ -5,8 +5,9 @@
  *   - un son par niveau, coupé au début (TRIM_SILENCE) pour être plus réactif ;
  *   - hauteur selon la taille : cerise = aigu ... pastèque = grave, en rééchantillonnant
  *     (playbackRate : plus c'est grave, plus c'est long, comme un vinyle ralenti) ;
- *   - un seul « canal » : une fusion coupe net le son précédent, un spawn ne joue
- *     que si rien n'est en cours.
+ *   - un seul « canal » : un spawn ne joue que si rien n'est en cours ; une fusion coupe
+ *     le son en cours, sauf le son d'une fusion plus grosse (le son d'une grosse patate
+ *     n'est donc pas coupé par les petites fusions des patates qui continuent de tomber).
  */
 (function () {
   "use strict";
@@ -25,6 +26,7 @@
       this.gain = null;
       this.buffers = [];
       this.current = null;       // source en cours (canal unique)
+      this.currentMerge = -1;    // niveau du son de fusion en cours (-1 : aucun, ou un spawn)
       this.loadToken = 0;
       this.muted = false;
     }
@@ -106,14 +108,17 @@
         try { this.current.stop(); } catch (_) { /* déjà fini */ }
         this.current = null;
       }
+      this.currentMerge = -1;
     }
 
-    /** Joue le son du niveau. interrupt=false : seulement si le canal est libre. */
-    play(level, interrupt = true) {
+    /** Joue le son du niveau.
+     *  merge=false (spawn) : seulement si le canal est libre.
+     *  merge=true (fusion) : coupe le son en cours, sauf celui d'une fusion plus grosse. */
+    play(level, merge = true) {
       if (!this.opts.enabled || this.muted || !this.ctx || this.ctx.state !== "running") return;
       const buffer = this.buffers[level];
       if (!buffer) return;
-      if (!interrupt && this.busy) return;
+      if (this.busy && (!merge || level < this.currentMerge)) return;
       this.stop();
       const src = this.ctx.createBufferSource();
       src.buffer = buffer;
@@ -121,8 +126,11 @@
         src.playbackRate.value = Math.pow(2, this.pitchForLevel(level, this.buffers.length) / 12);
       }
       src.connect(this.gain);
-      src.onended = () => { if (this.current === src) this.current = null; };
+      src.onended = () => {
+        if (this.current === src) { this.current = null; this.currentMerge = -1; }
+      };
       this.current = src;
+      this.currentMerge = merge ? level : -1;
       src.start();
     }
   }
