@@ -5,6 +5,10 @@
  * - La plus petite balle tombe automatiquement par le goulot à intervalle régulier.
  * - Deux balles du même type qui se touchent fusionnent en une plus grosse.
  * - À chaque fusion, le son du niveau est joué (voir audio.js).
+ * - Une image PNG transparente garde sa silhouette : elle est dessinée telle quelle et
+ *   rebondit selon sa forme (enveloppe convexe des pixels opaques), pas selon un cercle.
+ * - Effet « slime » : les patates s'écrasent sous les chocs, s'affaissent un peu au repos
+ *   et se tordent quand elles tournent (déformation visuelle, la forme physique reste rigide).
  *
  * Physique : Planck.js (Box2D). Le dessin se fait en pixels, la physique en mètres (SCALE).
  *
@@ -14,7 +18,7 @@
 (function () {
   "use strict";
 
-  const { World, Vec2, Circle, Chain } = planck;
+  const { World, Vec2, Circle, Polygon, Chain } = planck;
 
   // --------------------------------------------------------------------------
   // CONFIGURATION (mêmes noms et valeurs que final.py)
@@ -51,9 +55,31 @@
   // on donne donc directement les valeurs effectives d'origine à toutes les formes.
   const BALL_ELASTICITY = 0.75, WALL_ELASTICITY = 0.75;
   const FRICTION = 0.6;
-  const RESTITUTION = BALL_ELASTICITY * WALL_ELASTICITY;   // 0.5625
+  const RESTITUTION = BALL_ELASTICITY * WALL_ELASTICITY;   // 0.5625 (rebond de final.py)
   const EFFECTIVE_FRICTION = FRICTION * FRICTION;          // 0.36
-  const MERGE_TOLERANCE = 1.5;
+
+  // Slime : rebond plus mou et un peu plus collant que final.py (remettre RESTITUTION et
+  // EFFECTIVE_FRICTION ici pour retrouver le comportement d'origine).
+  const SLIME_RESTITUTION = 0.35;
+  const SLIME_FRICTION = 0.45;
+
+  // Déformation visuelle « slime » (ressorts amortis, en fraction de la taille)
+  const JELLY = {
+    maxSquash: 0.14,       // écrasement maximal (14 %)
+    maxTwist: 0.16,        // torsion maximale (cisaillement)
+    sag: 0.035,            // affaissement au repos, sous son propre poids
+    impact: 0.0012,        // vitesse d'écrasement par px/s de choc (grosse chute ≈ 10 %)
+    twist: 0.22,           // vitesse de torsion par rad/s de changement de rotation
+    squashFreq: 15,        // rad/s : vitesse du « boing »
+    squashDamping: 0.22,
+    twistFreq: 11,
+    twistDamping: 0.18,
+  };
+
+  // Lecture de la transparence des images
+  const ALPHA_SOLID = 160;        // pixel considéré comme plein (évite les halos doux)
+  const MIN_TRANSPARENT = 0.08;   // au moins 8 % de pixels transparents -> silhouette du PNG
+  const MAX_HULL_VERTICES = 12;   // limite de Planck pour un polygone
   const SUBSTEPS = 5;
   const SPEED_LEVELS = [1, 2, 4, 6, 8, 10];
   const SCALE = 50;                     // pixels par mètre (Box2D aime les objets de 0.1 à 10 m)
@@ -170,12 +196,159 @@
     });
   }
 
-  async function loadSprites(pack) {
-    const images = await Promise.all(pack.levels.map((l) => loadImage(l.image_url)));
-    return TYPES.map((t, i) => images[i]
-      ? makeSprite(images[i], t.radius, pack.crop_circle)
-      : makeFallback(t.radius, t.color));
+  const circleShape = (r) => ({ type: "circle", r, bound: r });
+
+  /** Enveloppe convexe (chaîne monotone d'Andrew), sens horaire à l'écran. */
+  function convexHull(points) {
+    const pts = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    if (pts.length < 3) return pts;
+    const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    const lower = [], upper = [];
+    for (const p of pts) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+      lower.push(p);
+    }
+    for (let i = pts.length - 1; i >= 0; i--) {
+      const p = pts[i];
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+      upper.push(p);
+    }
+    return lower.slice(0, -1).concat(upper.slice(0, -1));
   }
+
+  /** Réduit un polygone convexe à `max` sommets en retirant ceux qui comptent le moins (Visvalingam). */
+  function simplifyPolygon(poly, max) {
+    const pts = poly.slice();
+    const area = (a, b, c) => Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2;
+    while (pts.length > max) {
+      let best = 0, bestArea = Infinity;
+      for (let i = 0; i < pts.length; i++) {
+        const a = area(pts[(i - 1 + pts.length) % pts.length], pts[i], pts[(i + 1) % pts.length]);
+        if (a < bestArea) { bestArea = a; best = i; }
+      }
+      pts.splice(best, 1);
+    }
+    return pts;
+  }
+
+  const polygonArea = (poly) => Math.abs(poly.reduce((acc, [x, y], i) => {
+    const [x2, y2] = poly[(i + 1) % poly.length];
+    return acc + x * y2 - x2 * y;
+  }, 0)) / 2;
+
+  /** Min (érosion) ou max (dilatation) sur un carré de côté 2k+1, en deux passes séparées. */
+  function morph(mask, w, h, k, grow) {
+    const pass = (src, horizontal) => {
+      const out = new Uint8Array(w * h);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          let v = grow ? 0 : 1;
+          for (let d = -k; d <= k; d++) {
+            const xx = horizontal ? x + d : x, yy = horizontal ? y : y + d;
+            const inside = xx >= 0 && yy >= 0 && xx < w && yy < h;
+            const m = inside ? src[yy * w + xx] : 0;
+            v = grow ? (v | m) : (v & m);
+          }
+          out[y * w + x] = v;
+        }
+      }
+      return out;
+    };
+    return pass(pass(mask, true), false);
+  }
+
+  const morphOpen = (mask, w, h, k) => morph(morph(mask, w, h, k, false), w, h, k, true);
+
+  /** Lit la transparence d'une image (réduite à 128 px) : part de pixels transparents,
+   *  cadre des pixels opaques et enveloppe convexe de leur contour. null si illisible. */
+  function analyzeImage(img) {
+    const k = 128 / Math.max(img.naturalWidth, img.naturalHeight, 1);
+    const w = Math.max(1, Math.round(img.naturalWidth * k));
+    const h = Math.max(1, Math.round(img.naturalHeight * k));
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, w, h);
+    let data;
+    try {
+      data = ctx.getImageData(0, 0, w, h).data;
+    } catch (_) {
+      return null;                         // image d'une autre origine : on garde un cercle
+    }
+    const full = new Uint8Array(w * h);
+    let clear = 0, x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const a = data[(y * w + x) * 4 + 3];
+        if (a < 128) clear++;
+        if (a < ALPHA_SOLID) continue;
+        full[y * w + x] = 1;
+        if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y;
+      }
+    }
+    if (x1 < 0) return null;               // image entièrement transparente
+
+    // Forme physique : on retire d'abord les détails fins (tige, feuille, mèche de cheveux)
+    // par une « ouverture » (érosion puis dilatation), pour ne pas rebondir sur une tige.
+    let core = morphOpen(full, w, h, 8);
+    if (!core.some((v) => v)) core = full;
+    const solid = (x, y) => x >= 0 && y >= 0 && x < w && y < h && core[y * w + x] === 1;
+    const edge = [];
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (solid(x, y) && (!solid(x - 1, y) || !solid(x + 1, y) || !solid(x, y - 1) || !solid(x, y + 1))) {
+          edge.push([x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]);
+        }
+      }
+    }
+    return {
+      transparent: clear / (w * h) > MIN_TRANSPARENT,
+      k,
+      box: { x0, y0, x1: x1 + 1, y1: y1 + 1 },
+      hull: convexHull(edge),
+    };
+  }
+
+  /** PNG transparent : image recadrée sur ses pixels opaques, proportions gardées, tenant
+   *  dans le carré du niveau ; forme physique = enveloppe convexe (au plus 12 sommets). */
+  function makeCutout(img, info, radius) {
+    const d = radius * 2;
+    const { x0, y0, x1, y1 } = info.box;
+    const bw = x1 - x0, bh = y1 - y0;
+    const scale = d / Math.max(bw, bh);        // pixels écran par pixel d'analyse
+    const dw = bw * scale, dh = bh * scale;
+    const [c, ctx] = makeCanvas(d, d);
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(img, x0 / info.k, y0 / info.k, bw / info.k, bh / info.k, radius - dw / 2, radius - dh / 2, dw, dh);
+
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    let verts = info.hull.map(([x, y]) => [(x - cx) * scale, (y - cy) * scale]);
+    verts = simplifyPolygon(verts, MAX_HULL_VERTICES)
+      .filter((v, i, all) => Math.hypot(v[0] - all[(i + 1) % all.length][0], v[1] - all[(i + 1) % all.length][1]) > 1);
+    const area = verts.length >= 3 ? polygonArea(verts) : 0;
+    if (area < 0.15 * Math.PI * radius * radius) {          // forme trop fine : un cercle est plus sûr
+      return { sprite: c, shape: circleShape(radius) };
+    }
+    const bound = Math.max(...verts.map(([x, y]) => Math.hypot(x, y)));
+    return { sprite: c, shape: { type: "poly", verts, bound } };
+  }
+
+  /** Apparence + forme d'un niveau. Photo opaque : cercle (découpée si crop_circle),
+   *  PNG transparent : sa silhouette, sans contour ni cercle. */
+  function makeLook(img, type, cropCircle) {
+    const r = type.radius;
+    if (!img) return { sprite: makeFallback(r, type.color), shape: circleShape(r) };
+    const info = analyzeImage(img);
+    if (info && info.transparent) return makeCutout(img, info, r);
+    return { sprite: makeSprite(img, r, cropCircle), shape: circleShape(r) };
+  }
+
+  async function loadLooks(pack) {
+    const images = await Promise.all(pack.levels.map((l) => loadImage(l.image_url)));
+    return TYPES.map((t, i) => makeLook(images[i], t, pack.crop_circle));
+  }
+
+  const defaultLooks = () => TYPES.map((t) => ({ sprite: makeFallback(t.radius, t.color), shape: circleShape(t.radius) }));
 
   // --------------------------------------------------------------------------
   // STYLE « CARNET À DESSIN » : traits de crayon, couleurs de surligneur
@@ -355,9 +528,37 @@
       // paroi physique = surface intérieure du verre (les segments pymunk avaient un rayon WALL_RADIUS)
       const inner = offsetPath(path, WALL_RADIUS);
       const ground = world.createBody();
-      ground.createFixture(new Chain(inner.map(([x, y]) => Vec2(x / SCALE, y / SCALE)), false), {
-        friction: EFFECTIVE_FRICTION, restitution: RESTITUTION,
-      });
+      const wall = { friction: SLIME_FRICTION, restitution: SLIME_RESTITUTION };
+      ground.createFixture(new Chain(inner.map(([x, y]) => Vec2(x / SCALE, y / SCALE)), false), wall);
+      // segments de la paroi intérieure + normale vers l'intérieur, pour wallDistance()
+      this.segments = [];
+      for (let i = 0; i < inner.length - 1; i++) {
+        const [x0, y0] = inner[i], [x1, y1] = inner[i + 1];
+        const len = Math.hypot(x1 - x0, y1 - y0) || 1;
+        this.segments.push({ x0, y0, dx: (x1 - x0) / len, dy: (y1 - y0) / len, len });
+      }
+    }
+
+    /** Point de la paroi le plus proche de (x, y), normale vers l'intérieur et distance signée
+     *  (positive à l'intérieur de la flasque, négative de l'autre côté du verre). */
+    wallDistance(x, y) {
+      let best = null;
+      for (const g of this.segments) {
+        const t = Math.max(0, Math.min(g.len, (x - g.x0) * g.dx + (y - g.y0) * g.dy));
+        const qx = g.x0 + g.dx * t, qy = g.y0 + g.dy * t;
+        const d = Math.hypot(x - qx, y - qy);
+        if (!best || d < best.d) best = { d, qx, qy, nx: g.dy, ny: -g.dx };
+      }
+      best.signed = (x - best.qx) * best.nx + (y - best.qy) * best.ny;
+      return best;
+    }
+
+    /** Décale vers l'intérieur une forme de rayon englobant `bound` qui chevaucherait le verre. */
+    keepInside(x, y, bound) {
+      const w = this.wallDistance(x, y);
+      if (w.signed >= bound) return [x, y];
+      const push = bound - w.signed;
+      return [x + w.nx * push, y + w.ny * push];
     }
 
     /** Couches du verre, dessinées une seule fois (sans coût pendant la simulation). */
@@ -408,10 +609,29 @@
   // --------------------------------------------------------------------------
   // BALLE
   // --------------------------------------------------------------------------
+  /** Ressort amorti : x tend vers target ; retourne la nouvelle vitesse. */
+  function spring(x, v, target, freq, damping, dt) {
+    const a = -freq * freq * (x - target) - 2 * damping * freq * v;
+    return v + a * dt;
+  }
+  const clamp = (v, m) => Math.max(-m, Math.min(m, v));
+
+  /** Avance un ressort d'un pas ; en butée, la vitesse vers l'extérieur est annulée
+   *  (sinon la déformation resterait collée à sa limite). Retourne [x, v]. */
+  function stepSpring(x, v, target, freq, damping, max, dt) {
+    v = spring(x, v, target, freq, damping, dt);
+    x += v * dt;
+    if (Math.abs(x) > max) {
+      x = Math.sign(x) * max;
+      if (v * x > 0) v = 0;
+    }
+    return [x, v];
+  }
+
   class Ball {
-    constructor(world, level, pos, vel = [0, 0], angle = 0, angularVelocity = 0) {
+    constructor(world, level, shape, pos, vel = [0, 0], angle = 0, angularVelocity = 0) {
       this.level = level;
-      this.radius = TYPES[level].radius;
+      this.radius = TYPES[level].radius;         // demi-côté du carré où l'image est dessinée
       this.body = world.createBody({
         type: "dynamic",
         position: Vec2(pos[0] / SCALE, pos[1] / SCALE),
@@ -419,10 +639,26 @@
         angle,
         angularVelocity,
       });
-      // densité uniforme -> masse proportionnelle à l'aire, comme final.py
-      this.body.createFixture(new Circle(this.radius / SCALE), {
-        density: 1, friction: EFFECTIVE_FRICTION, restitution: RESTITUTION,
+      this.body.setUserData(this);
+      this.fixture = null;
+      this.setShape(shape);
+      // état « slime » : écrasement (squash) le long d'un axe, torsion (twist)
+      this.squash = 0; this.squashV = 0; this.axis = -Math.PI / 2;
+      this.twist = 0; this.twistV = 0;
+      this.prevV = [vel[0], vel[1]];
+      this.prevW = angularVelocity;
+    }
+
+    /** Forme physique : cercle, ou silhouette du PNG (densité uniforme -> masse ∝ aire). */
+    setShape(shape) {
+      if (this.fixture) this.body.destroyFixture(this.fixture);
+      const geom = shape.type === "poly"
+        ? new Polygon(shape.verts.map(([x, y]) => Vec2(x / SCALE, y / SCALE)))
+        : new Circle(shape.r / SCALE);
+      this.fixture = this.body.createFixture(geom, {
+        density: 1, friction: SLIME_FRICTION, restitution: SLIME_RESTITUTION,
       });
+      this.bound = shape.bound;                  // rayon qui englobe la forme
     }
 
     get x() { return this.body.getPosition().x * SCALE; }
@@ -433,12 +669,52 @@
 
     remove(world) { world.destroyBody(this.body); }
 
-    draw(ctx, sprites) {
+    /** « Boing » d'une patate qui vient de naître d'une fusion. */
+    pop() {
+      this.squashV = -2.0;
+      this.twistV = rand(-1.2, 1.2);
+    }
+
+    /** Déformation slime, une fois par image affichée (temps réel `dt`, temps simulé `simDt`).
+     *  On regarde l'accélération due aux contacts (variation de vitesse moins la gravité) :
+     *  au repos elle vaut juste la gravité -> léger affaissement ; un choc -> gros écrasement. */
+    jelly(dt, simDt) {
+      const vx = this.vx, vy = this.vy, w = this.body.getAngularVelocity();
+      const ax = (vx - this.prevV[0]) / simDt;
+      const ay = (vy - this.prevV[1]) / simDt - GRAVITY;
+      const accel = Math.hypot(ax, ay);
+      this.prevV = [vx, vy];
+      // choc = accélération au-delà de « posé sur quelque chose »
+      const shock = Math.max(0, accel - 1.5 * GRAVITY) * simDt;     // en px/s
+      if (accel > 0.5 * GRAVITY) {
+        const target = Math.atan2(ay, ax);                            // direction de la poussée
+        const diff = Math.atan2(Math.sin(target - this.axis), Math.cos(target - this.axis));
+        this.axis += diff * Math.min(1, shock > 0 ? 1 : 6 * dt);
+      }
+      this.squashV += shock * JELLY.impact;
+      const rest = Math.min(accel, 2 * GRAVITY) / GRAVITY * JELLY.sag;
+      [this.squash, this.squashV] = stepSpring(this.squash, this.squashV, rest, JELLY.squashFreq,
+        JELLY.squashDamping, JELLY.maxSquash, dt);
+
+      const dw = w - this.prevW;
+      this.prevW = w;
+      this.twistV += dw * JELLY.twist + Math.sign(dw || 1) * shock * JELLY.impact * 0.8;
+      [this.twist, this.twistV] = stepSpring(this.twist, this.twistV, 0, JELLY.twistFreq,
+        JELLY.twistDamping, JELLY.maxTwist, dt);
+    }
+
+    draw(ctx, looks) {
       const d = this.radius * 2;
+      const s = this.squash;
       ctx.save();
       ctx.translate(this.x, this.y);
-      ctx.rotate(this.body.getAngle());    // y vers le bas : angle positif = sens horaire, comme pymunk
-      ctx.drawImage(sprites[this.level], -this.radius, -this.radius, d, d);
+      // écrasement le long de l'axe du choc (aire à peu près conservée)
+      ctx.rotate(this.axis);
+      ctx.scale(1 - s, 1 / (1 - s));
+      ctx.rotate(-this.axis);
+      ctx.rotate(this.body.getAngle());     // y vers le bas : angle positif = sens horaire, comme pymunk
+      ctx.transform(1, 0, this.twist, 1, 0, 0);   // torsion : le haut et le bas partent en sens opposés
+      ctx.drawImage(looks[this.level].sprite, -this.radius, -this.radius, d, d);
       ctx.restore();
     }
   }
@@ -449,12 +725,18 @@
   class Simulation {
     constructor(voices) {
       this.voices = voices;
-      this.sprites = TYPES.map((t) => makeFallback(t.radius, t.color));
+      this.looks = defaultLooks();      // image + forme physique de chaque niveau
       this.background = new Background();
       const { path, hl } = buildFlaskPath();
       this.glass = Flask.render(path, hl);
       this.speedIndex = 0;              // conservé après un reset
       this.reset();
+    }
+
+    /** Nouveau pack : nouvelles images, et nouvelles formes pour les balles déjà là. */
+    setLooks(looks) {
+      this.looks = looks;
+      for (const b of this.balls) b.setShape(looks[b.level].shape);
     }
 
     reset() {
@@ -475,59 +757,74 @@
       if (x === null) x = rand(FLASK_CX - half, FLASK_CX + half);
       x = Math.max(FLASK_CX - half, Math.min(FLASK_CX + half, x));
       const y = Math.max(r + 2, FLASK_TOP - r - 2);
+      const shape = this.looks[level].shape;
 
       // goulot bouché ? on n'ajoute rien par-dessus une autre balle
       for (const b of this.balls) {
-        if (Math.hypot(b.x - x, b.y - y) - b.radius <= r + 2) return false;
+        if (Math.hypot(b.x - x, b.y - y) - b.bound <= shape.bound + 2) return false;
       }
-      this.balls.push(new Ball(this.world, level, [x, y], [0, 0], rand(0, TAU), rand(-3, 3)));
+      this.balls.push(new Ball(this.world, level, shape, [x, y], [0, 0], rand(0, TAU), rand(-3, 3)));
       if (SOUND_ON_SPAWN) this.voices.play(level, false);   // ne coupe jamais une fusion
       return true;
     }
 
-    /** Détecte les balles du même type en contact et les fusionne. */
+    /** Fusionne les balles du même type qui se touchent (contacts réels du moteur physique,
+     *  donc selon leur vraie forme). Une balle ne fusionne qu'une fois par passe. */
     mergePass() {
-      const toRemove = new Set();
-      const toAdd = [];
-      const n = this.balls.length;
+      const used = new Set();
+      const pairs = [];
       const last = TYPES.length - 1;
-      for (let i = 0; i < n; i++) {
-        if (toRemove.has(i)) continue;
-        const a = this.balls[i];
-        for (let j = i + 1; j < n; j++) {
-          const b = this.balls[j];
-          if (toRemove.has(j) || a.level !== b.level) continue;
-          if (!MERGE_LAST_TYPE && a.level === last) continue;
-          const ax = a.x, ay = a.y, bx = b.x, by = b.y;
-          if (Math.hypot(ax - bx, ay - by) <= a.radius + b.radius + MERGE_TOLERANCE) {
-            toRemove.add(i); toRemove.add(j);
-            const ma = a.mass, mb = b.mass, total = ma + mb;
-            // le nouveau est au barycentre, avec la quantité de mouvement conservée
-            const pos = [(ax * ma + bx * mb) / total, (ay * ma + by * mb) / total];
-            const vel = [(a.vx * ma + b.vx * mb) / total, (a.vy * ma + b.vy * mb) / total];
-            const angVel = (a.body.getAngularVelocity() + b.body.getAngularVelocity()) / 2;
-            const angle = a.body.getAngle();
-            if (a.level + 1 < TYPES.length) toAdd.push([a.level + 1, pos, vel, angle, angVel]);
-            const soundLevel = SOUND_OF_CREATED_FRUIT ? a.level + 1 : a.level;
-            if (soundLevel < TYPES.length) this.voices.play(soundLevel);
-            this.score += (a.level + 1) * 10;
-            break;
-          }
-        }
+      for (let c = this.world.getContactList(); c; c = c.getNext()) {
+        if (!c.isTouching()) continue;
+        const a = c.getFixtureA().getBody().getUserData();
+        const b = c.getFixtureB().getBody().getUserData();
+        if (!a || !b || a.level !== b.level || used.has(a) || used.has(b)) continue;
+        if (!MERGE_LAST_TYPE && a.level === last) continue;
+        used.add(a); used.add(b);
+        pairs.push([a, b]);
       }
-      if (toRemove.size) {
-        [...toRemove].sort((p, q) => q - p).forEach((idx) => {
-          this.balls[idx].remove(this.world);
-          this.balls.splice(idx, 1);
-        });
-        for (const [level, pos, vel, angle, angVel] of toAdd) {
-          this.balls.push(new Ball(this.world, level, pos, vel, angle, angVel));
-        }
+      if (!pairs.length) return;
+      const born = [];
+      for (const [a, b] of pairs) {
+        const ax = a.x, ay = a.y, bx = b.x, by = b.y;
+        const ma = a.mass, mb = b.mass, total = ma + mb;
+        // le nouveau est au barycentre, avec la quantité de mouvement conservée
+        const pos = [(ax * ma + bx * mb) / total, (ay * ma + by * mb) / total];
+        const vel = [(a.vx * ma + b.vx * mb) / total, (a.vy * ma + b.vy * mb) / total];
+        const angVel = (a.body.getAngularVelocity() + b.body.getAngularVelocity()) / 2;
+        const angle = a.body.getAngle();
+        if (a.level + 1 < TYPES.length) born.push([a.level + 1, pos, vel, angle, angVel]);
+        const soundLevel = SOUND_OF_CREATED_FRUIT ? a.level + 1 : a.level;
+        if (soundLevel < TYPES.length) this.voices.play(soundLevel);
+        this.score += (a.level + 1) * 10;
+      }
+      this.balls = this.balls.filter((b) => {
+        if (used.has(b)) b.remove(this.world);
+        return !used.has(b);
+      });
+      for (const [level, pos, vel, angle, angVel] of born) {
+        // une forme plus grosse qui naîtrait à cheval sur le verre serait éjectée dehors
+        const shape = this.looks[level].shape;
+        const inside = pos[1] > FLASK_TOP ? this.flask.keepInside(pos[0], pos[1], shape.bound) : pos;
+        const ball = new Ball(this.world, level, shape, inside, vel, angle, angVel);
+        ball.pop();
+        this.balls.push(ball);
       }
     }
 
-    /** Supprime les balles éjectées hors de l'écran. */
+    /** Supprime les balles éjectées hors de l'écran, et remet dans la flasque une balle
+     *  qui serait passée de l'autre côté du verre (formes poussées très fort). */
     cleanup() {
+      for (const b of this.balls) {
+        if (b.y < FLASK_TOP) continue;                 // au-dessus du goulot : elle tombe dedans
+        const w = this.flask.wallDistance(b.x, b.y);
+        if (w.signed > -2) continue;
+        const [x, y] = this.flask.keepInside(b.x, b.y, b.bound);
+        const v = b.body.getLinearVelocity();
+        const out = v.x * w.nx + v.y * w.ny;          // on annule la vitesse vers l'extérieur
+        b.body.setTransform(Vec2(x / SCALE, y / SCALE), b.body.getAngle());
+        if (out < 0) b.body.setLinearVelocity(Vec2(v.x - out * w.nx, v.y - out * w.ny));
+      }
       this.balls = this.balls.filter((b) => {
         const out = b.y > HEIGHT + 300 || b.x < -300 || b.x > WIDTH + 300;
         if (out) b.remove(this.world);
@@ -549,6 +846,7 @@
       }
       this.background.update(dt);
       const simDt = dt * this.speed;
+      for (const b of this.balls) b.jelly(dt, simDt);     // temps réel : pas de stroboscope en x10
 
       if (AUTO_SPAWN) {
         this.spawnTimer += simDt;
@@ -569,7 +867,7 @@
     draw(ctx) {
       this.background.draw(ctx);
       ctx.drawImage(this.glass.back, 0, 0, WIDTH, HEIGHT);
-      for (const ball of this.balls) ball.draw(ctx, this.sprites);
+      for (const ball of this.balls) ball.draw(ctx, this.looks);
       ctx.drawImage(this.glass.front, 0, 0, WIDTH, HEIGHT);
 
       ctx.textBaseline = "middle";
@@ -650,7 +948,7 @@
       currentPack = pack;
       storePack(pack.id);
       ui.select.value = pack.id;
-      sim.sprites = await loadSprites(pack);
+      sim.setLooks(await loadLooks(pack));
       await voices.load(pack.levels.map((l) => l.sound_url));
     }
 
